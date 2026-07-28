@@ -22,11 +22,15 @@ under --new-prefix) are restored the same way as renames.
 import argparse
 import sys
 from pathlib import Path
+from typing import cast
 
 from git import Repo
+from git.objects.blob import Blob
 
 
-def find_prefixed_changes(repo: Repo, old_prefix: str, new_prefix: str):
+def find_prefixed_changes(
+    repo: Repo, old_prefix: str, new_prefix: str
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[str]]:
     diff_index = repo.commit("HEAD~1").diff(
         repo.commit("HEAD"),
         find_copies_harder=True,
@@ -34,19 +38,21 @@ def find_prefixed_changes(repo: Repo, old_prefix: str, new_prefix: str):
         C=True,
     )
 
-    renames = []
-    copies = []
-    deletions = []
+    renames: list[tuple[str, str]] = []
+    copies: list[tuple[str, str]] = []
+    deletions: list[str] = []
     for diff in diff_index:
         if diff.change_type == "D":
             src = diff.a_path
-            if src.startswith(old_prefix + "/"):
+            if src is not None and src.startswith(old_prefix + "/"):
                 deletions.append(src)
             continue
 
         if diff.change_type not in ("R", "C"):
             continue
         src, dst = diff.a_path, diff.b_path
+        if src is None or dst is None:
+            continue
         if not (src.startswith(old_prefix + "/") and dst.startswith(new_prefix + "/")):
             continue
         if diff.change_type == "R":
@@ -58,8 +64,9 @@ def find_prefixed_changes(repo: Repo, old_prefix: str, new_prefix: str):
 
 
 def restore_path(repo: Repo, path: str, dry_run: bool) -> None:
-    blob = repo.commit("HEAD~1").tree / path
-    data = blob.data_stream.read()
+    blob = cast(Blob, repo.commit("HEAD~1").tree / path)
+    data = cast(bytes, blob.data_stream.read())
+    assert repo.working_tree_dir is not None
     target = Path(repo.working_tree_dir) / path
 
     print(f"[restore] {path} (unchanged content from HEAD~1)")
@@ -68,7 +75,7 @@ def restore_path(repo: Repo, path: str, dry_run: bool) -> None:
 
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(data)
-    repo.index.add([path])
+    repo.index.add([path])  # pyright: ignore[reportUnknownMemberType]
 
 
 def main() -> int:
