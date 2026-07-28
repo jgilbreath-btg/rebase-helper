@@ -41,6 +41,10 @@ location.
    moved out and was deleted in the same commit) are restored the same
    way as renames.
 
+   Plain modifications to files that stayed at the same path under
+   `--old-prefix` (edits that slipped into the same commit as an unrelated
+   move) are reverted back to their pre-commit content.
+
 3. Review the staged changes, then amend the commit and continue the
    rebase:
 
